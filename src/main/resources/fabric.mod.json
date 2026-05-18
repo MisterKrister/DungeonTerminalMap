@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "dungeonterminalmap",
+  "version": "${version}",
+  "name": "DungeonTerminalMap",
+  "description": "Terminal phase class-assignment HUD map for SkyBlock dungeons.",
+  "authors": ["krister"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      {
+        "value": "dev.krister.dungeonterminalmap.DungeonTerminalMapAddon",
+        "adapter": "kotlin"
+      }
+    ]
+  },
+  "mixins": [
+    "dungeonterminalmap.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": "~1.21.10",
+    "java": ">=21",
+    "fabric-api": "*",
+    "fabric-language-kotlin": "*",
+    "devonian": ">=1.15.8-1.21.10"
+  }
+}

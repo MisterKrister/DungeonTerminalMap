@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "dev.krister.dungeonterminalmap.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "ChatComponentMixin",
+    "DevonianMixin",
+    "GuiMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
