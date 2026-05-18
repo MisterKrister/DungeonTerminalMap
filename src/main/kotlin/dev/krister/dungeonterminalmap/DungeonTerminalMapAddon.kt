@@ -298,8 +298,8 @@ class DungeonTerminalMapFeature(
         private const val MAP_IMAGE_WIDTH = 96
         private const val MAP_IMAGE_HEIGHT = 296
         private const val MARKER_RADIUS = 8
-        private const val POSITION_MATCH_MAX_DISTANCE_SQ = 144.0
-        private const val POSITION_MATCH_RADIUS = 12.0
+        private const val POSITION_MATCH_MAX_DISTANCE_SQ = 25.0
+        private const val POSITION_MATCH_RADIUS = 5.0
         private val TAB_PLAYER_REGEX = Regex(
             "\\[\\d+]\\s+(?:\\[[A-Za-z0-9+]+]\\s+)?(?<name>[A-Za-z0-9_]{1,16})\\s+(?:.+\\s+)?\\((?<class>Healer|Mage|Berserk|Archer|Tank)\\s*[^)]*\\)",
             RegexOption.IGNORE_CASE,
