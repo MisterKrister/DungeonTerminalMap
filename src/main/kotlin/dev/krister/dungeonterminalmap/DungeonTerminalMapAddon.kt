@@ -17,14 +17,18 @@ import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
+import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext
+import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.client.renderer.RenderPipelines
+import net.minecraft.client.renderer.debug.DebugRenderer
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.world.scores.DisplaySlot
 import net.minecraft.world.scores.PlayerTeam
+import net.minecraft.world.phys.AABB
 import org.slf4j.LoggerFactory
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -45,6 +49,7 @@ object DungeonTerminalMapAddon : ClientModInitializer {
         debug("Client entrypoint initializing")
         registerFabricChatHooks()
         registerCommands()
+        registerWorldRenderHooks()
     }
 
     fun registerWithDevonian() {
@@ -77,6 +82,10 @@ object DungeonTerminalMapAddon : ClientModInitializer {
         current.renderHud(graphics)
     }
 
+    fun renderWorldDebug(context: WorldRenderContext) {
+        feature?.renderMatchBoxes(context)
+    }
+
     fun onChatMessage(message: Component) {
         onChatMessage(message, "chat_component_mixin")
     }
@@ -95,6 +104,13 @@ object DungeonTerminalMapAddon : ClientModInitializer {
             onChatMessage(message, "fabric_chat_canceled sender=${sender?.name ?: "null"}")
         }
         debug("Registered Fabric chat receive hooks")
+    }
+
+    private fun registerWorldRenderHooks() {
+        WorldRenderEvents.BEFORE_DEBUG_RENDER.register { context ->
+            renderWorldDebug(context)
+        }
+        debug("Registered world debug render hook")
     }
 
     fun onChatMessage(message: Component, source: String) {
@@ -204,6 +220,10 @@ object DungeonTerminalMapAddon : ClientModInitializer {
                         }
                         1
                     })
+                    .then(literal("boxes").executes {
+                        withFeature { it.toggleMatchBoxes() }
+                        1
+                    })
                     .then(literal("fake")
                         .then(argument("player", StringArgumentType.word()).executes { context ->
                             val player = StringArgumentType.getString(context, "player")
@@ -279,6 +299,7 @@ class DungeonTerminalMapFeature(
         private const val MAP_IMAGE_HEIGHT = 296
         private const val MARKER_RADIUS = 8
         private const val POSITION_MATCH_MAX_DISTANCE_SQ = 144.0
+        private const val POSITION_MATCH_RADIUS = 12.0
         private val TAB_PLAYER_REGEX = Regex(
             "\\[\\d+]\\s+(?:\\[[A-Za-z0-9+]+]\\s+)?(?<name>[A-Za-z0-9_]{1,16})\\s+(?:.+\\s+)?\\((?<class>Healer|Mage|Berserk|Archer|Tank)\\s*[^)]*\\)",
             RegexOption.IGNORE_CASE,
@@ -320,6 +341,7 @@ class DungeonTerminalMapFeature(
     private var runtimeSection: TermSection? = null
     private var bossRoomSeen = false
     private var terminalPhaseDone = false
+    private var showMatchBoxes = false
 
     override fun getEditText(): List<String> = listOf(
         "&bDungeon Terminal Map",
@@ -407,6 +429,42 @@ class DungeonTerminalMapFeature(
         ctx.fill(bounds.x.toInt(), (bounds.y + bounds.h).toInt() - 1, (bounds.x + bounds.w).toInt(), (bounds.y + bounds.h).toInt(), color)
         ctx.fill(bounds.x.toInt(), bounds.y.toInt(), bounds.x.toInt() + 1, (bounds.y + bounds.h).toInt(), color)
         ctx.fill((bounds.x + bounds.w).toInt() - 1, bounds.y.toInt(), (bounds.x + bounds.w).toInt(), (bounds.y + bounds.h).toInt(), color)
+    }
+
+    fun toggleMatchBoxes() {
+        showMatchBoxes = !showMatchBoxes
+        send("Terminal match boxes ${if (showMatchBoxes) "shown" else "hidden"}.")
+        log("Terminal match boxes toggled show=$showMatchBoxes section=${currentSection().displayName}")
+    }
+
+    fun renderMatchBoxes(context: WorldRenderContext) {
+        if (!showMatchBoxes || terminalPhaseDone || !shouldRenderLocation()) return
+        val cameraPosition = context.gameRenderer().mainCamera.position
+        val matrices = context.matrices()
+        matrices.pushPose()
+        matrices.translate(-cameraPosition.x, -cameraPosition.y, -cameraPosition.z)
+        currentSection().tasks
+            .filter { it.worldPositions.isNotEmpty() }
+            .forEach { task ->
+                val complete = completedTasks.containsKey(task.id)
+                val color = if (task.isLever()) {
+                    DebugBoxColor(1.0f, 0.76f, 0.18f)
+                } else {
+                    DebugBoxColor.fromArgb(displayRoleFor(task).argb)
+                }
+                task.worldPositions.forEach { point ->
+                    DebugRenderer.renderFilledBox(
+                        matrices,
+                        context.consumers(),
+                        point.matchAabb(),
+                        color.red,
+                        color.green,
+                        color.blue,
+                        if (complete) 0.08f else 0.18f,
+                    )
+                }
+            }
+        matrices.popPose()
     }
 
     fun sendStatus() {
@@ -968,6 +1026,27 @@ class DungeonTerminalMapFeature(
             val dy = y + 0.5 - playerY
             val dz = z + 0.5 - playerZ
             return dx * dx + dy * dy + dz * dz
+        }
+
+        fun matchAabb(): AABB =
+            AABB(
+                x + 0.5 - POSITION_MATCH_RADIUS,
+                y + 0.5 - POSITION_MATCH_RADIUS,
+                z + 0.5 - POSITION_MATCH_RADIUS,
+                x + 0.5 + POSITION_MATCH_RADIUS,
+                y + 0.5 + POSITION_MATCH_RADIUS,
+                z + 0.5 + POSITION_MATCH_RADIUS,
+            )
+    }
+
+    private data class DebugBoxColor(val red: Float, val green: Float, val blue: Float) {
+        companion object {
+            fun fromArgb(argb: Int): DebugBoxColor =
+                DebugBoxColor(
+                    ((argb shr 16) and 0xFF) / 255f,
+                    ((argb shr 8) and 0xFF) / 255f,
+                    (argb and 0xFF) / 255f,
+                )
         }
     }
 

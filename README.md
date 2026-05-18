@@ -42,6 +42,7 @@ GUI settings are managed through Devonian with `/devonian`.
 /dtm pos <x> <y>
 /dtm move <dx> <dy>
 /dtm scale <scale>
+/dtm boxes
 /dtm fake <player>
 /dtm chat <message>
 /dtm testfill
@@ -56,6 +57,7 @@ GUI settings are managed through Devonian with `/devonian`.
 - `/dtm complete` and `/dtm pending` manually change a class completion state.
 - `/dtm section` selects the active P3 section. Accepted values include `s1`, `s2`, `s3`, `s3core`, `s4`, and `s4core`.
 - `/dtm pos`, `move`, and `scale` adjust HUD placement without opening the editor.
+- `/dtm boxes` toggles translucent world boxes around terminal/lever position-match areas.
 - `/dtm fake` and `/dtm chat` feed test completions into the parser.
 - `/dtm testfill`, `testdone`, and `testclear` are local HUD test helpers.
 
