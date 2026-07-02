@@ -65,10 +65,11 @@ GUI settings are managed through Devonian with `/devonian`.
 
 Hypixel chat identifies the player and completion type, but not the exact
 terminal or lever. DungeonTerminalMap first checks the completing player's
-tracked client-side position against known P3 terminal/lever coordinates. If no
-nearby match is available, it falls back to the configured class assignment
-order. Device completions use assignment fallback because the waypoint data does
-not include device locations.
+tracked client-side position against known P3 terminal/lever coordinates. The
+match radius is 5 blocks, and `/dtm boxes` shows the same position-match areas
+in world. If no nearby match is available, it falls back to the configured class
+assignment order. Device completions use assignment fallback because the
+waypoint data does not include device locations.
 
 The mod only reads normal client-side chat and tracked entity positions. It does
 not send gameplay packets, spoof actions, or request extra server data.
