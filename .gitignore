@@ -1,5 +1,7 @@
 .gradle/
 .kotlin/
+.jdks/
+.tmp-fabric-api/
 build/
 run/
 out/
@@ -13,6 +15,7 @@ debug.log
 
 # Local reverse-engineering scratch data
 krypt-extracted/
+repo-inspect-*/
 
 # IDE metadata
 .idea/

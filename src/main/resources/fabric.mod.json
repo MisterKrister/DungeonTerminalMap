@@ -19,11 +19,11 @@
     "dungeonterminalmap.mixins.json"
   ],
   "depends": {
-    "fabricloader": ">=0.18.4",
-    "minecraft": "~1.21.10",
-    "java": ">=21",
+    "fabricloader": ">=0.19.3",
+    "minecraft": "~26.1-",
+    "java": ">=25",
     "fabric-api": "*",
     "fabric-language-kotlin": "*",
-    "devonian": ">=1.15.8-1.21.10"
+    "devonian": ">=1.25.9"
   }
 }

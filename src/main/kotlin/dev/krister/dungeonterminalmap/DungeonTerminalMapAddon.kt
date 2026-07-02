@@ -3,33 +3,33 @@ package dev.krister.dungeonterminalmap
 import com.github.synnerz.devonian.Devonian
 import com.github.synnerz.devonian.api.Location
 import com.github.synnerz.devonian.api.events.ChatEvent
+import com.github.synnerz.devonian.api.events.RenderWorldEvent
 import com.github.synnerz.devonian.api.events.TickEvent
 import com.github.synnerz.devonian.config.Categories
 import com.github.synnerz.devonian.config.Config
 import com.github.synnerz.devonian.config.ConfigData
 import com.github.synnerz.devonian.hud.texthud.TextHudFeature
 import com.github.synnerz.devonian.utils.BoundingBox
+import com.github.synnerz.devonian.utils.render.Render3DImmediate
 import com.mojang.brigadier.arguments.FloatArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType.greedyString
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
-import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext
-import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.Minecraft
-import net.minecraft.client.gui.GuiGraphics
+import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.renderer.RenderPipelines
-import net.minecraft.client.renderer.debug.DebugRenderer
 import net.minecraft.network.chat.Component
-import net.minecraft.resources.ResourceLocation
+import net.minecraft.resources.Identifier
 import net.minecraft.world.scores.DisplaySlot
 import net.minecraft.world.scores.PlayerTeam
 import net.minecraft.world.phys.AABB
 import org.slf4j.LoggerFactory
+import java.awt.Color
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -49,7 +49,6 @@ object DungeonTerminalMapAddon : ClientModInitializer {
         debug("Client entrypoint initializing")
         registerFabricChatHooks()
         registerCommands()
-        registerWorldRenderHooks()
     }
 
     fun registerWithDevonian() {
@@ -65,7 +64,7 @@ object DungeonTerminalMapAddon : ClientModInitializer {
         debug("Devonian feature registration complete")
     }
 
-    fun renderOverlay(graphics: GuiGraphics) {
+    fun renderOverlay(graphics: GuiGraphicsExtractor) {
         if (!renderHookSeen) {
             renderHookSeen = true
             debug("Gui render hook fired")
@@ -80,10 +79,6 @@ object DungeonTerminalMapAddon : ClientModInitializer {
             return
         }
         current.renderHud(graphics)
-    }
-
-    fun renderWorldDebug(context: WorldRenderContext) {
-        feature?.renderMatchBoxes(context)
     }
 
     fun onChatMessage(message: Component) {
@@ -104,13 +99,6 @@ object DungeonTerminalMapAddon : ClientModInitializer {
             onChatMessage(message, "fabric_chat_canceled sender=${sender?.name ?: "null"}")
         }
         debug("Registered Fabric chat receive hooks")
-    }
-
-    private fun registerWorldRenderHooks() {
-        WorldRenderEvents.BEFORE_DEBUG_RENDER.register { context ->
-            renderWorldDebug(context)
-        }
-        debug("Registered world debug render hook")
     }
 
     fun onChatMessage(message: Component, source: String) {
@@ -359,6 +347,10 @@ class DungeonTerminalMapFeature(
         on<ChatEvent> { event ->
             parseTerminalChat(event.message)
         }
+
+        on<RenderWorldEvent> {
+            renderMatchBoxes()
+        }
     }
 
     private fun startRuntime(reason: String) {
@@ -386,7 +378,7 @@ class DungeonTerminalMapFeature(
         setLines(buildStatusLines())
     }
 
-    fun renderHud(graphics: GuiGraphics) {
+    fun renderHud(graphics: GuiGraphicsExtractor) {
         startRuntime("gui render")
 
         val enabled = isEnabled()
@@ -414,14 +406,14 @@ class DungeonTerminalMapFeature(
         getHeight() * scale,
     )
 
-    override fun drawImpl(ctx: GuiGraphics) {
+    override fun drawImpl(ctx: GuiGraphicsExtractor) {
         if (!renderHud.get()) return
         if (terminalPhaseDone) return
         if (!shouldRenderLocation()) return
         drawTerminalMap(ctx, if (x.isFinite()) x.toFloat() else 10f, if (y.isFinite()) y.toFloat() else 10f, scale)
     }
 
-    override fun sampleDraw(ctx: GuiGraphics, mx: Int, my: Int, selected: Boolean) {
+    override fun sampleDraw(ctx: GuiGraphicsExtractor, mx: Int, my: Int, selected: Boolean) {
         drawTerminalMap(ctx, if (x.isFinite()) x.toFloat() else 10f, if (y.isFinite()) y.toFloat() else 10f, scale)
         val bounds = getBounds()
         val color = if (selected) 0xFFFFFFFF.toInt() else 0x99FFFFFF.toInt()
@@ -437,34 +429,49 @@ class DungeonTerminalMapFeature(
         log("Terminal match boxes toggled show=$showMatchBoxes section=${currentSection().displayName}")
     }
 
-    fun renderMatchBoxes(context: WorldRenderContext) {
+    fun renderMatchBoxes() {
         if (!showMatchBoxes || terminalPhaseDone || !shouldRenderLocation()) return
-        val cameraPosition = context.gameRenderer().mainCamera.position
-        val matrices = context.matrices()
-        matrices.pushPose()
-        matrices.translate(-cameraPosition.x, -cameraPosition.y, -cameraPosition.z)
         currentSection().tasks
             .filter { it.worldPositions.isNotEmpty() }
             .forEach { task ->
                 val complete = completedTasks.containsKey(task.id)
-                val color = if (task.isLever()) {
-                    DebugBoxColor(1.0f, 0.76f, 0.18f)
+                val base = if (task.isLever()) {
+                    Color(255, 194, 46)
                 } else {
-                    DebugBoxColor.fromArgb(displayRoleFor(task).argb)
+                    displayRoleFor(task).toColor()
                 }
                 task.worldPositions.forEach { point ->
-                    DebugRenderer.renderFilledBox(
-                        matrices,
-                        context.consumers(),
-                        point.matchAabb(),
-                        color.red,
-                        color.green,
-                        color.blue,
-                        if (complete) 0.08f else 0.18f,
+                    val box = point.matchAabb()
+                    val width = box.maxX - box.minX
+                    val height = box.maxY - box.minY
+                    val depth = box.maxZ - box.minZ
+                    val centerX = box.minX + width * 0.5
+                    val centerY = box.minY + height * 0.5
+                    val centerZ = box.minZ + depth * 0.5
+                    Render3DImmediate.renderFilledBox(
+                        centerX,
+                        centerY,
+                        centerZ,
+                        width,
+                        height,
+                        Color(base.red, base.green, base.blue, if (complete) 28 else 60),
+                        wz = depth,
+                        centered = true,
+                    )
+                    Render3DImmediate.renderWireframeBox(
+                        centerX,
+                        centerY,
+                        centerZ,
+                        width,
+                        height,
+                        Color(base.red, base.green, base.blue, 190),
+                        lineWidth = 2.0,
+                        phase = true,
+                        wz = depth,
+                        centered = true,
                     )
                 }
             }
-        matrices.popPose()
     }
 
     fun sendStatus() {
@@ -822,7 +829,7 @@ class DungeonTerminalMapFeature(
         }
     }
 
-    private fun drawTerminalMap(graphics: GuiGraphics, drawX: Float, drawY: Float, drawScale: Float) {
+    private fun drawTerminalMap(graphics: GuiGraphicsExtractor, drawX: Float, drawY: Float, drawScale: Float) {
         val section = currentSection()
         val width = mapWidthValue()
         val height = mapHeightValue()
@@ -845,7 +852,7 @@ class DungeonTerminalMapFeature(
     }
 
     private fun drawMarker(
-        graphics: GuiGraphics,
+        graphics: GuiGraphicsExtractor,
         x: Int,
         y: Int,
         task: TerminalTask,
@@ -863,10 +870,10 @@ class DungeonTerminalMapFeature(
 
     }
 
-    private fun drawCentered(graphics: GuiGraphics, text: String, x: Int, y: Int, width: Int, color: Int) {
+    private fun drawCentered(graphics: GuiGraphicsExtractor, text: String, x: Int, y: Int, width: Int, color: Int) {
         val fitted = fitText(text, width - 4)
         val textWidth = mc.font.width(fitted)
-        graphics.drawString(mc.font, fitted, x + (width - textWidth) / 2, y, color, true)
+        graphics.text(mc.font, fitted, x + (width - textWidth) / 2, y, color, true)
     }
 
     private fun fitText(text: String, maxWidth: Int): String {
@@ -955,7 +962,7 @@ class DungeonTerminalMapFeature(
     }
 
     private fun send(message: String) {
-        mc.player?.displayClientMessage(Component.literal((prefix + message).colorize()), false)
+        mc.player?.sendSystemMessage(Component.literal((prefix + message).colorize()))
     }
 
     private fun logRenderState(message: String) {
@@ -995,6 +1002,9 @@ class DungeonTerminalMapFeature(
         BERSERK("Berserk", "BER", "&c", 0xFFED240E.toInt()),
         ARCHER("Archer", "ARC", "&6", 0xFFFF9800.toInt()),
         TANK("Tank", "TNK", "&2", 0xFF138717.toInt());
+
+        fun toColor(): Color =
+            Color((argb shr 16) and 0xFF, (argb shr 8) and 0xFF, argb and 0xFF)
 
         companion object {
             fun from(name: String?): DungeonClass? {
@@ -1076,14 +1086,14 @@ class DungeonTerminalMapFeature(
 
     private enum class TermSection(
         val displayName: String,
-        val texture: ResourceLocation,
+        val texture: Identifier,
         private val aliases: Set<String>,
         val terminalCount: Int,
         val tasks: List<TerminalTask>,
     ) {
         S1(
             "S1",
-            ResourceLocation.fromNamespaceAndPath("dungeonterminalmap", "textures/p3/p3s1.png"),
+            Identifier.fromNamespaceAndPath("dungeonterminalmap", "textures/p3/p3s1.png"),
             setOf("s1", "1"),
             7,
             listOf(
@@ -1098,7 +1108,7 @@ class DungeonTerminalMapFeature(
         ),
         S2(
             "S2",
-            ResourceLocation.fromNamespaceAndPath("dungeonterminalmap", "textures/p3/p3s2.png"),
+            Identifier.fromNamespaceAndPath("dungeonterminalmap", "textures/p3/p3s2.png"),
             setOf("s2", "2"),
             8,
             listOf(
@@ -1114,7 +1124,7 @@ class DungeonTerminalMapFeature(
         ),
         S3_NO_CORE(
             "S3 Core",
-            ResourceLocation.fromNamespaceAndPath("dungeonterminalmap", "textures/p3/p3s3.png"),
+            Identifier.fromNamespaceAndPath("dungeonterminalmap", "textures/p3/p3s3.png"),
             setOf("s3", "3", "s3core", "s3c", "3core", "3c"),
             7,
             listOf(
@@ -1129,7 +1139,7 @@ class DungeonTerminalMapFeature(
         ),
         S4_NO_CORE(
             "S4 Core",
-            ResourceLocation.fromNamespaceAndPath("dungeonterminalmap", "textures/p3/p3s4.png"),
+            Identifier.fromNamespaceAndPath("dungeonterminalmap", "textures/p3/p3s4.png"),
             setOf("s4", "4", "s4core", "s4c", "4core", "4c"),
             7,
             listOf(
