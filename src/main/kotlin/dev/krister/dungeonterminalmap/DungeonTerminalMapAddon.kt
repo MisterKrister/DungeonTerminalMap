@@ -316,6 +316,7 @@ class DungeonTerminalMapFeature(
 
     private var runtimeStarted = false
     private var wasInDungeon = false
+    private var lastLevel: Any? = null
     private var lastPlayerScan = 0L
     private var lastVisibilityCheckAt = 0L
     private var lastVisibilityResult = false
@@ -360,6 +361,14 @@ class DungeonTerminalMapFeature(
     }
 
     private fun clientTick() {
+        // Hypixel sends a new world per server, so a level swap means a new run even when the
+        // area check stays "dungeon" (e.g. requeueing from the Dungeon Hub into Catacombs).
+        val level = mc.level
+        if (level !== lastLevel) {
+            lastLevel = level
+            if (level != null) resetRun("world changed")
+        }
+
         val inDungeon = isDungeonArea()
         if (inDungeon && !wasInDungeon) {
             resetRun("entered dungeon")
@@ -867,7 +876,6 @@ class DungeonTerminalMapFeature(
         graphics.fill(left, top, left + size, top + size, border)
         graphics.fill(left + 2, top + 2, left + size - 2, top + size - 2, fill)
         drawCentered(graphics, if (complete) "✓" else task.label, left, top + 2, size, 0xFFFFFFFF.toInt())
-
     }
 
     private fun drawCentered(graphics: GuiGraphicsExtractor, text: String, x: Int, y: Int, width: Int, color: Int) {
@@ -1049,17 +1057,6 @@ class DungeonTerminalMapFeature(
             )
     }
 
-    private data class DebugBoxColor(val red: Float, val green: Float, val blue: Float) {
-        companion object {
-            fun fromArgb(argb: Int): DebugBoxColor =
-                DebugBoxColor(
-                    ((argb shr 16) and 0xFF) / 255f,
-                    ((argb shr 8) and 0xFF) / 255f,
-                    (argb and 0xFF) / 255f,
-                )
-        }
-    }
-
     private enum class TerminalCompletionKind(val logName: String) {
         TERMINAL("terminal"),
         DEVICE("device"),
@@ -1117,7 +1114,7 @@ class DungeonTerminalMapFeature(
                 TerminalTask("s2_ss", "D", 8, 173, DungeonClass.HEALER),
                 TerminalTask("s2_3", "3", 85, 129, DungeonClass.BERSERK, worldPositions = wp(47, 109, 121, 47, 109, 122)),
                 TerminalTask("s2_4", "4", 15, 83, DungeonClass.ARCHER, worldPositions = wp(39, 108, 143, 39, 108, 142)),
-                TerminalTask("s2_5", "5", 85, 129, DungeonClass.BERSERK, worldPositions = wp(40, 124, 122, 40, 124, 123)),
+                TerminalTask("s2_5", "5", 85, 95, DungeonClass.BERSERK, worldPositions = wp(40, 124, 122, 40, 124, 123)),
                 TerminalTask("s2_ll", "LL", 22, 18, DungeonClass.HEALER, worldPositions = wp(23, 132, 138, 23, 133, 138)),
                 TerminalTask("s2_rl", "RL", 68, 35, DungeonClass.ARCHER, worldPositions = wp(27, 124, 127, 27, 125, 127)),
             ),

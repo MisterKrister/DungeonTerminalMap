@@ -3,7 +3,7 @@ plugins {
     kotlin("jvm") version "2.3.20"
 }
 
-version = "1.0.0"
+version = "1.1.0"
 group = "dev.krister"
 
 base {
